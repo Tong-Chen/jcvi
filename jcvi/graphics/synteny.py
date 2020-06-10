@@ -172,6 +172,8 @@ class Region(object):
         pad=0.05,
         vpad=0.015,
         extra_features=None,
+        add_gene_label=False, 
+        gene_style="Rectangle"
     ):
         x, y = layout.x, layout.y
         ratio = layout.ratio
@@ -226,8 +228,21 @@ class Region(object):
 
             color = forward if strand == "+" else backward
             if not hidden:
-                gp = Glyph(ax, x1, x2, y, height, gradient=False, fc=color, zorder=3)
-                gp.set_transform(tr)
+                # pic_type='Rectangle',  gene_orientation=''
+
+                gp = Glyph(ax, x1, x2, y, height, gradient=False, fc=color, zorder=3, pic_type=gene_style)
+                if add_gene_label:
+                    ax.text(
+                        (x1+x2)/2,
+                        y + 0.01,
+                        markup(g.accn), 
+                        size = 1.8, 
+                        rotation=25, 
+                        ha="left",
+                        va="center",
+                    )
+                if gene_style == "Rectangle":
+                    gp.set_transform(tr)
 
         # Extra features (like repeats)
         if extra_features:
@@ -327,6 +342,9 @@ class Synteny(object):
         vpad=0.015,
         scalebar=False,
         shadestyle="curve",
+        gene_legend=True, 
+        add_gene_label=True, 
+        gene_style="Rectangle"
     ):
 
         w, h = fig.get_figwidth(), fig.get_figheight()
@@ -378,6 +396,8 @@ class Synteny(object):
                 loc_label=loc_label,
                 vpad=vpad,
                 extra_features=ef,
+                add_gene_label=add_gene_label, 
+                gene_style=gene_style
             )
             self.rr.append(r)
             # Use tid and accn to store gene positions
@@ -440,6 +460,9 @@ class Synteny(object):
                 va="center",
             )
 
+        if gene_legend:
+            draw_gene_legend(ax=root, x1=0.33, x2=0.44, ytop=0.92, d=0.04, text=True, repeat=extra_features)
+
         if tree:
             from jcvi.graphics.tree import draw_tree, read_trees
 
@@ -473,8 +496,8 @@ def draw_gene_legend(ax, x1, x2, ytop, d=0.04, text=False, repeat=False):
     ax.plot([x2, x2 + d], [ytop, ytop], ":", color=backward, lw=2)
     ax.plot([x2], [ytop], "<", color=backward, mec="g")
     if text:
-        ax.text(x1 + d / 2, ytop + d / 2, "gene (+)", ha="center")
-        ax.text(x2 + d / 2, ytop + d / 2, "gene (-)", ha="center")
+        ax.text(x1 + d / 2, ytop + d / 2, "gene (+)", ha="center", size=6)
+        ax.text(x2 + d / 2, ytop + d / 2, "gene (-)", ha="center", size=6)
     if repeat:
         xr = (x1 + x2 + d) / 2
         Glyph(
@@ -487,7 +510,7 @@ def draw_gene_legend(ax, x1, x2, ytop, d=0.04, text=False, repeat=False):
             fc="#ff7f00",
             zorder=2,
         )
-        ax.text(xr, ytop + d / 2, "repeat", ha="center")
+        ax.text(xr, ytop + d / 2, "repeat", ha="center", size=6)
 
 
 def main():
@@ -499,11 +522,24 @@ def main():
         "--tree", help="Display trees on the bottom of the figure [default: %default]"
     )
     p.add_option("--extra", help="Extra features in BED format")
+    p.add_option("--gene_style", default="Rectangle", help="Default <Rectangle> to plot genes as rectangle. Accept <Arrow> to add orientation of genes.")
     p.add_option(
         "--scalebar",
         default=False,
         action="store_true",
         help="Add scale bar to the plot",
+    )
+    p.add_option(
+        "--add_gene_legend",
+        default=False,
+        action="store_true",
+        help="Add forward and reverse strand gene legend to the plot",
+    )
+    p.add_option(
+        "--add_gene_label",
+        default=False,
+        action="store_true",
+        help="Add gene names to the plot",
     )
     p.add_option(
         "--shadestyle",
@@ -535,8 +571,12 @@ def main():
         extra_features=opts.extra,
         scalebar=opts.scalebar,
         shadestyle=opts.shadestyle,
+        gene_legend=opts.add_gene_legend, 
+        add_gene_label=opts.add_gene_label, 
+        gene_style=opts.gene_style
+        
     )
-
+    
     root.set_xlim(0, 1)
     root.set_ylim(0, 1)
     root.set_axis_off()

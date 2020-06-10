@@ -20,6 +20,7 @@ from jcvi.graphics.base import (
     Polygon,
     savefig,
     get_map,
+    FancyArrowPatch
 )
 
 
@@ -207,13 +208,22 @@ class Glyph(BaseGlyph):
     """Draws gradient rectangle
     """
 
-    def __init__(self, ax, x1, x2, y, height=0.04, gradient=True, fc="gray", **kwargs):
+    def __init__(self, ax, x1, x2, y, height=0.04, gradient=True, fc="gray", pic_type='Rectangle',  **kwargs):
 
         super(Glyph, self).__init__(ax)
         width = x2 - x1
         # Frame around the gradient rectangle
         p1 = (x1, y - 0.5 * height)
-        self.append(Rectangle(p1, width, height, fc=fc, lw=0, **kwargs))
+        if pic_type == 'Rectangle':
+            self.append(Rectangle(p1, width, height, fc=fc, lw=0, **kwargs))
+        elif pic_type == 'Arrow':
+            style="Simple,head_length=1,head_width=5,tail_width=5"
+            x_tail = x1
+            y_tail = y
+            x_head = x2
+            y_head = y
+            self.append(FancyArrowPatch((x_tail, y_tail), (x_head, y_head),
+                arrowstyle=style, fc=fc, lw=0,  **kwargs))
 
         # Several overlaying patches
         if gradient:
