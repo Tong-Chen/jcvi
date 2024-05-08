@@ -21,31 +21,31 @@ import sys
 from typing import Optional
 
 import numpy as np
-import matplotlib.transforms as transforms
+from matplotlib import transforms
 from matplotlib.path import Path
 
 from ..apps.base import OptionParser, logger
 from ..compara.synteny import BlockFile
 from ..formats.base import DictFile
 from ..formats.bed import Bed
-from ..graphics.base import (
+from ..utils.cbook import human_size
+from ..utils.validator import validate_in_choices, validate_in_range
+
+from .base import (
+    AbstractLayout,
+    PathPatch,
     markup,
     plt,
     savefig,
-    PathPatch,
-    AbstractLayout,
 )
-from ..graphics.glyph import (
+from .glyph import (
     BasePalette,
     Glyph,
     OrientationPalette,
     OrthoGroupPalette,
     RoundLabel,
 )
-from ..graphics.tree import draw_tree, read_trees
-
-from ..utils.cbook import human_size
-from ..utils.validator import validate_in_choices, validate_in_range
+from .tree import draw_tree, read_trees
 
 
 HorizontalAlignments = ("left", "right", "leftalign", "rightalign", "center", "")
@@ -444,7 +444,7 @@ class Synteny(object):
         scalebar: bool = False,
         shadestyle: str = "curve",
         glyphstyle: str = "arrow",
-        glyphcolor: BasePalette = OrientationPalette(),
+        glyphcolor: str = "orientation",
         seed: Optional[int] = None,
         prune_features=True,
     ):
@@ -591,13 +591,13 @@ class Synteny(object):
 
 def draw_gene_legend(
     ax,
-    x1,
-    x2,
-    ytop,
-    d=0.04,
-    text=False,
-    repeat=False,
-    glyphstyle="box",
+    x1: float,
+    x2: float,
+    ytop: float,
+    d: float = 0.04,
+    text: bool = False,
+    repeat: bool = False,
+    glyphstyle: str = "box",
 ):
     """
     Draw a legend for gene glyphs.
@@ -628,62 +628,61 @@ def draw_gene_legend(
 
 def main():
     p = OptionParser(__doc__)
-    p.add_option("--switch", help="Rename the seqid with two-column file")
-    p.add_option("--tree", help="Display trees on the bottom of the figure")
-    p.add_option("--extra", help="Extra features in BED format")
-    p.add_option(
+    p.add_argument("--switch", help="Rename the seqid with two-column file")
+    p.add_argument("--tree", help="Display trees on the bottom of the figure")
+    p.add_argument("--extra", help="Extra features in BED format")
+    p.add_argument(
         "--genelabels",
         help='Show only these gene labels, separated by comma. Example: "At1g12340,At5g54690"',
     )
-    p.add_option(
+    p.add_argument(
         "--genelabelsize",
         default=0,
-        type="int",
+        type=int,
         help="Show gene labels at this font size, useful for debugging. "
         + "However, plot may appear visually crowded. "
         + "Reasonably good values are 2 to 6 [Default: disabled]",
     )
-    p.add_option(
+    p.add_argument(
         "--genelabelrotation",
         default=25,
-        type="int",
-        help="Rotate gene labels at this angle (anti-clockwise), useful for debugging. "
-        + "[Default: 25]",
+        type=int,
+        help="Rotate gene labels at this angle (anti-clockwise), useful for debugging.",
     )
-    p.add_option(
+    p.add_argument(
         "--scalebar",
         default=False,
         action="store_true",
         help="Add scale bar to the plot",
     )
-    p.add_option(
+    p.add_argument(
         "--glyphstyle",
         default="box",
         choices=Glyph.Styles,
         help="Style of feature glyphs",
     )
-    p.add_option(
+    p.add_argument(
         "--glyphcolor",
         default="orientation",
         choices=Glyph.Palette,
         help="Glyph coloring based on",
     )
-    p.add_option(
+    p.add_argument(
         "--shadestyle",
         default="curve",
         choices=Shade.Styles,
         help="Style of syntenic wedges",
     )
-    p.add_option(
+    p.add_argument(
         "--outputprefix",
         default="",
         help="Prefix for the output file",
     )
-    p.add_option(
+    p.add_argument(
         "--noprune",
         default=False,
         action="store_true",
-        help="If set, do not exclude small features from annotation track (<1% of region)",
+        help="If set, do not exclude small features from annotation track (<1%% of region)",
     )
     opts, args, iopts = p.set_image_options(figsize="8x7")
 
@@ -698,7 +697,7 @@ def main():
 
     pf = datafile.rsplit(".", 1)[0]
     fig = plt.figure(1, (iopts.w, iopts.h))
-    root = fig.add_axes([0, 0, 1, 1])
+    root = fig.add_axes((0, 0, 1, 1))
     Synteny(
         fig,
         root,

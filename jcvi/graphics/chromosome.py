@@ -6,30 +6,33 @@ Legacy script to plot distribution of certain classes onto chromosomes. Adapted
 from the script used in the Tang et al. PNAS 2010 paper, sigma figure.
 """
 import sys
+
 from itertools import groupby
 from math import ceil
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
 from natsort import natsorted
 
-from ..apps.base import OptionGroup, OptionParser, datafile, logger, sample_N
+from ..apps.base import OptionParser, datafile, logger, sample_N
 from ..formats.base import DictFile, get_number
 from ..formats.bed import Bed
 from ..formats.sizes import Sizes
-from ..graphics.base import (
+
+from .base import (
     CirclePolygon,
     Polygon,
     Rectangle,
     latex,
     markup,
+    normalize_axes,
     plt,
     savefig,
     set1_n,
     set3_n,
 )
-from ..graphics.glyph import BaseGlyph, plot_cap
+from .glyph import BaseGlyph, plot_cap
 
 
 class Chromosome(BaseGlyph):
@@ -424,50 +427,47 @@ def main():
     """
 
     p = OptionParser(main.__doc__)
-    p.add_option(
+    p.add_argument(
         "--sizes", help="FASTA sizes file, which contains chr<tab>size, one per line"
     )
-    g = OptionGroup(p, "Display accessories")
-    g.add_option(
+    g = p.add_argument_group("Display accessories")
+    g.add_argument(
         "--title",
         help="title of the image",
     )
-    g.add_option(
+    g.add_argument(
         "--gauge",
         default=False,
         action="store_true",
         help="draw a gauge with size label",
     )
-    p.add_option_group(g)
 
-    g = OptionGroup(p, "HTML image map")
-    g.add_option(
+    g = p.add_argument_group("HTML image map")
+    g.add_argument(
         "--imagemap",
         default=False,
         action="store_true",
         help="generate an HTML image map associated with the image",
     )
-    g.add_option(
+    g.add_argument(
         "--winsize",
         default=50000,
-        type="int",
+        type=int,
         help="if drawing an imagemap, specify the window size (bases) of each map element ",
     )
-    p.add_option_group(g)
 
-    g = OptionGroup(p, "Color legend")
-    g.add_option(
+    g = p.add_argument_group("Color legend")
+    g.add_argument(
         "--nolegend",
         dest="legend",
         default=True,
         action="store_false",
         help="Do not generate color legend",
     )
-    g.add_option(
-        "--mergedist", default=0, type="int", help="Merge regions closer than "
+    g.add_argument(
+        "--mergedist", default=0, type=int, help="Merge regions closer than "
     )
-    g.add_option("--empty", help="Write legend for unpainted region")
-    p.add_option_group(g)
+    g.add_argument("--empty", help="Write legend for unpainted region")
 
     opts, args, iopts = p.set_image_options(figsize="6x6", dpi=300)
 
@@ -480,7 +480,7 @@ def main():
         mappingfile = args[1]
 
     fig = plt.figure(1, (iopts.w, iopts.h))
-    root = fig.add_axes([0, 0, 1, 1])
+    root = fig.add_axes((0, 0, 1, 1))
 
     draw_chromosomes(
         root,
@@ -497,9 +497,7 @@ def main():
         title=opts.title,
     )
 
-    root.set_xlim(0, 1)
-    root.set_ylim(0, 1)
-    root.set_axis_off()
+    normalize_axes(root)
 
     prefix = bedfile.rsplit(".", 1)[0]
     figname = prefix + "." + opts.format
@@ -511,14 +509,14 @@ def draw_chromosomes(
     bedfile,
     sizes,
     iopts,
-    mergedist,
-    winsize,
-    imagemap,
-    mappingfile=None,
-    gauge=False,
-    legend=True,
-    empty=False,
-    title=None,
+    mergedist: int,
+    winsize: int,
+    imagemap: bool = False,
+    mappingfile: Optional[str] = None,
+    gauge: bool = False,
+    legend: bool = True,
+    empty: bool = False,
+    title: Optional[str] = None,
 ):
     bed = Bed(bedfile)
     prefix = bedfile.rsplit(".", 1)[0]

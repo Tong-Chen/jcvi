@@ -8,20 +8,22 @@ same and does parallelization both in core and on grid.
 import os.path as op
 import sys
 import shutil
-import logging
 
 from subprocess import CalledProcessError, STDOUT
 
-from jcvi.utils.cbook import depends
-from jcvi.apps.base import (
+from ..utils.cbook import depends
+
+from .base import (
     ActionDispatcher,
     OptionParser,
     cleanup,
     get_abs_path,
+    logger,
     mkdir,
     sh,
     which,
 )
+from .grid import MakeManager
 
 
 @depends
@@ -124,7 +126,7 @@ def run_megablast(
 def run_blast_filter(infile=None, outfile=None, pctid=95, hitlen=50):
     from jcvi.formats.blast import filter
 
-    logging.debug("Filter BLAST result (pctid={0}, hitlen={1})".format(pctid, hitlen))
+    logger.debug("Filter BLAST result (pctid={0}, hitlen={1})".format(pctid, hitlen))
     pctidopt = "--pctid={0}".format(pctid)
     hitlenopt = "--hitlen={0}".format(hitlen)
     filter([infile, pctidopt, hitlenopt])
@@ -153,13 +155,12 @@ def minimap(args):
     is the same, we are in "self-scan" mode (e.g. useful for finding internal
     duplications resulted from mis-assemblies).
     """
-    from jcvi.apps.grid import MakeManager
     from jcvi.formats.fasta import Fasta
 
     p = OptionParser(minimap.__doc__)
-    p.add_option(
+    p.add_argument(
         "--chunks",
-        type="int",
+        type=int,
         default=2000000,
         help="Split ref.fasta into chunks of size in self-scan mode",
     )
@@ -212,12 +213,11 @@ def nucmer(args):
     """
     from itertools import product
 
-    from jcvi.apps.grid import MakeManager
     from jcvi.formats.base import split
 
     p = OptionParser(nucmer.__doc__)
-    p.add_option(
-        "--chunks", type="int", help="Split both query and subject into chunks"
+    p.add_argument(
+        "--chunks", type=int, help="Split both query and subject into chunks"
     )
     p.set_params(prog="nucmer", params="-l 100 -c 500")
     p.set_cpus()
@@ -255,7 +255,6 @@ def blasr(args):
     strategy described below.
     """
     from more_itertools import grouper
-    from jcvi.apps.grid import MakeManager
 
     p = OptionParser(blasr.__doc__)
     p.set_cpus(cpus=8)
@@ -352,9 +351,9 @@ def blast(args):
     task_choices = ("blastn", "blastn-short", "dc-megablast", "megablast", "vecscreen")
     p = OptionParser(blast.__doc__)
     p.set_align(pctid=0, evalue=0.01)
-    p.add_option("--wordsize", type="int", help="Word size")
-    p.add_option("--best", default=1, type="int", help="Only look for best N hits")
-    p.add_option(
+    p.add_argument("--wordsize", type=int, help="Word size")
+    p.add_argument("--best", default=1, type=int, help="Only look for best N hits")
+    p.add_argument(
         "--task", default="megablast", choices=task_choices, help="Task of the blastn"
     )
     p.set_cpus()
@@ -391,8 +390,6 @@ def lastgenome(args):
     $ lastal -E0.05 -C2 Chr10A-NEAR Chr10A.fa -fTAB > Chr10A.Chr10A.tab
     $ last-dotplot Chr10A.Chr10A.tab
     """
-    from jcvi.apps.grid import MakeManager
-
     p = OptionParser(lastgenome.__doc__)
     opts, args = p.parse_args(args)
 
@@ -435,8 +432,6 @@ def lastgenomeuniq(args):
 
     Works with LAST v959.
     """
-    from jcvi.apps.grid import MakeManager
-
     p = OptionParser(lastgenome.__doc__)
     opts, args = p.parse_args(args)
 
@@ -491,29 +486,29 @@ def last(args, dbtype=None):
     Works with LAST-719.
     """
     p = OptionParser(last.__doc__)
-    p.add_option(
+    p.add_argument(
         "--dbtype",
         default="nucl",
         choices=("nucl", "prot"),
         help="Molecule type of subject database",
     )
-    p.add_option("--path", help="Specify LAST path")
-    p.add_option(
+    p.add_argument("--path", help="Specify LAST path")
+    p.add_argument(
         "--mask", default=False, action="store_true", help="Invoke -c in lastdb"
     )
-    p.add_option(
+    p.add_argument(
         "--format",
         default="BlastTab",
         choices=("TAB", "MAF", "BlastTab", "BlastTab+"),
         help="Output format",
     )
-    p.add_option(
+    p.add_argument(
         "--minlen",
         default=0,
-        type="int",
+        type=int,
         help="Filter alignments by how many bases match",
     )
-    p.add_option("--minid", default=0, type="int", help="Minimum sequence identity")
+    p.add_argument("--minid", default=0, type=int, help="Minimum sequence identity")
     p.set_cpus()
     p.set_outdir()
     p.set_params()
@@ -533,7 +528,7 @@ def last(args, dbtype=None):
     lastal_bin = getpath("lastal")
     for bin in (lastdb_bin, lastal_bin):
         if not which(bin):
-            logging.fatal("`%s` not found on PATH. Have you installed LAST?", bin)
+            logger.fatal("`%s` not found on PATH. Have you installed LAST?", bin)
             sys.exit(1)
 
     subjectdb = subject.rsplit(".", 1)[0]
@@ -574,9 +569,9 @@ def last(args, dbtype=None):
     except CalledProcessError as e:  # multi-threading disabled
         message = "lastal failed with message:"
         message += "\n{0}".format(e.output.decode())
-        logging.error(message)
+        logger.error(message)
         try:
-            logging.debug("Failed to run `lastal` with multi-threading. Trying again.")
+            logger.debug("Failed to run `lastal` with multi-threading. Trying again.")
             sh(
                 cmd + f" -P 1 {subjectdb} {query}",
                 outfile=lastfile,
@@ -586,8 +581,8 @@ def last(args, dbtype=None):
         except CalledProcessError as e:
             message = "lastal failed with message:"
             message += "\n{0}".format(e.output.decode())
-            logging.error(message)
-            logging.fatal("Failed to run `lastal`. Aborted.")
+            logger.error(message)
+            logger.fatal("Failed to run `lastal`. Aborted.")
             cleanup(lastfile)
             sys.exit(1)
     return lastfile
@@ -600,13 +595,13 @@ def blast_main(args, dbtype=None):
     Run blastp/blastn by calling BLAST+ blastp/blastn depends on dbtype.
     """
     p = OptionParser(blast_main.__doc__)
-    p.add_option(
+    p.add_argument(
         "--dbtype",
         default="nucl",
         choices=("nucl", "prot"),
         help="Molecule type of subject database",
     )
-    p.add_option("--path", help="Specify BLAST path for blastn or blastp")
+    p.add_argument("--path", help="Specify BLAST path for blastn or blastp")
 
     p.set_cpus()
     p.set_outdir()
@@ -629,30 +624,28 @@ def blast_main(args, dbtype=None):
     lastal_bin = getpath(cmd)
     for bin in (lastdb_bin, lastal_bin):
         if not which(bin):
-            logging.fatal("`%s` not found on PATH. Have you installed BLAST?", bin)
+            logger.fatal("`%s` not found on PATH. Have you installed BLAST?", bin)
             sys.exit(1)
 
-    db_suffix = '.nin' if dbtype == "nucl" else ".pin"
+    db_suffix = ".nin" if dbtype == "nucl" else ".pin"
 
-    run_formatdb(
-        infile=subject,
-        outfile=subject + db_suffix,
-        dbtype=dbtype)
+    run_formatdb(infile=subject, outfile=subject + db_suffix, dbtype=dbtype)
 
     blastfile = get_outfile(subject, query, suffix="last", outdir=opts.outdir)
     # Make several attempts to run LASTAL
     try:
         sh(
-            cmd + f" -num_threads {cpus} -query {query} -db {subject} -out {blastfile}" +
-            " -outfmt 6 -max_target_seqs 1000 -evalue 1e-5",
+            cmd
+            + f" -num_threads {cpus} -query {query} -db {subject} -out {blastfile}"
+            + " -outfmt 6 -max_target_seqs 1000 -evalue 1e-5",
             check=False,
             redirect_error=STDOUT,
         )
     except CalledProcessError as e:  # multi-threading disabled
         message = f"{cmd} failed with message:"
         message += "\n{0}".format(e.output.decode())
-        logging.error(message)
-        logging.fatal("Failed to run `blast`. Aborted.")
+        logger.error(message)
+        logger.fatal("Failed to run `blast`. Aborted.")
         cleanup(blastfile)
         sys.exit(1)
     return blastfile
@@ -666,7 +659,7 @@ def diamond_blastp_main(args, dbtype="prot"):
     """
     p = OptionParser(diamond_blastp_main.__doc__)
 
-    p.add_option("--path", help="Specify diamond path for diamond blastp")
+    p.add_argument("--path", help="Specify diamond path for diamond blastp")
 
     p.set_cpus()
     p.set_outdir()
@@ -688,27 +681,29 @@ def diamond_blastp_main(args, dbtype="prot"):
     diamond_bin = getpath("diamond")
     for bin in (diamond_bin,):
         if not which(bin):
-            logging.fatal("`%s` not found on PATH. Have you installed Diamond?", bin)
+            logger.fatal("`%s` not found on PATH. Have you installed Diamond?", bin)
             sys.exit(1)
 
     run_diamond_makedb(
         infile=subject,
-        outfile=subject + '.dmnd',)
+        outfile=subject + ".dmnd",
+    )
 
     blastfile = get_outfile(subject, query, suffix="last", outdir=opts.outdir)
     # Make several attempts to run LASTAL
     try:
         sh(
-            cmd + f" --threads {cpus} --query {query} --db {subject} --out {blastfile}" +
-            " --ultra-sensitive --max-target-seqs 1000 --evalue 1e-5 --outfmt 6",
+            cmd
+            + f" --threads {cpus} --query {query} --db {subject} --out {blastfile}"
+            + " --ultra-sensitive --max-target-seqs 1000 --evalue 1e-5 --outfmt 6",
             check=False,
             redirect_error=STDOUT,
         )
     except CalledProcessError as e:  # multi-threading disabled
         message = f"{cmd} failed with message:"
         message += "\n{0}".format(e.output.decode())
-        logging.error(message)
-        logging.fatal("Failed to run `diamond blastp`. Aborted.")
+        logger.error(message)
+        logger.fatal("Failed to run `diamond blastp`. Aborted.")
         cleanup(blastfile)
         sys.exit(1)
     return blastfile

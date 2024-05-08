@@ -4,18 +4,15 @@
 import copy
 import os.path as op
 from os import remove
+
 import sys
-import logging
-
-logging.getLogger("matplotlib").setLevel(logging.WARNING)
-logging.getLogger("numexpr").setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.INFO)
-
 
 from functools import partial
+from typing import Optional, List, Tuple, Union
 
 import numpy as np
 import matplotlib as mpl
+import seaborn as sns
 
 mpl.use("Agg")
 
@@ -24,6 +21,7 @@ import matplotlib.ticker as ticker
 
 from brewer2mpl import get_map
 from matplotlib import cm, rc, rcParams
+from matplotlib.colors import Colormap
 from matplotlib.patches import (
     Rectangle,
     Polygon,
@@ -34,11 +32,12 @@ from matplotlib.patches import (
     FancyArrowPatch,
     FancyBboxPatch,
 )
-from typing import Optional
 
-from ..apps.base import datadir, glob, listify, logger, sample_N, which
+from ..apps.base import datadir, glob, logger, sample_N, which
 from ..formats.base import LineFile
+from ..utils.cbook import human_size
 
+Extent = Tuple[float, float, float, float]
 
 CHARS = {
     "&": r"\&",
@@ -154,6 +153,15 @@ class AbstractLayout(LineFile):
         return "\n".join(str(x) for x in self)
 
 
+def adjust_extent(extent: Extent, root_extent: Extent) -> Extent:
+    """
+    Adjust the extent of the root axes.
+    """
+    rx, ry, rw, rh = root_extent
+    ex, ey, ew, eh = extent
+    return rx + ex * rw, ry + ey * rh, ew * rw, eh * rh
+
+
 def linear_blend(from_color, to_color, fraction=0.5):
     """Interpolate a new color between two colors.
 
@@ -191,7 +199,10 @@ def linear_shade(from_color, fraction=0.5):
     return linear_blend(from_color, "w", fraction)
 
 
-def load_image(filename):
+def load_image(filename: str) -> np.ndarray:
+    """
+    Load an image file and return as numpy array.
+    """
     img = plt.imread(filename)
     if len(img.shape) == 2:  # Gray-scale image, convert to RGB
         # http://www.socouldanyone.com/2013/03/converting-grayscale-to-rgb-with-numpy.html
@@ -272,15 +283,20 @@ def prettyplot():
 blues_r, reds, blue_red, green_purple, red_purple = prettyplot()
 
 
-def normalize_axes(axes):
-    axes = listify(axes)
+def normalize_axes(*axes):
+    """
+    Normalize the axes to have the same scale.
+    """
     for ax in axes:
         ax.set_xlim(0, 1)
         ax.set_ylim(0, 1)
         ax.set_axis_off()
 
 
-def panel_labels(ax, labels, size=16):
+def panel_labels(ax, labels, size: int = 16):
+    """
+    Add panel labels (A, B, ...) to a figure.
+    """
     for xx, yy, panel_label in labels:
         if rcParams["text.usetex"]:
             panel_label = r"$\textbf{{{0}}}$".format(panel_label)
@@ -332,7 +348,7 @@ def savefig(figname, dpi=150, iopts=None, cleanup=True):
 
 
 # human readable size (Kb, Mb, Gb)
-def human_readable(x, pos, base=False):
+def human_readable(x: Union[str, int], _, base=False):
     x = str(int(x))
     if x.endswith("000000000"):
         x = x[:-9] + "G"
@@ -418,14 +434,12 @@ def setup_theme(
     usetex: bool = True,
 ):
     try:
-        import seaborn as sns
-
         extra_rc = {
             "lines.linewidth": 1,
             "lines.markeredgewidth": 1,
             "patch.edgecolor": "k",
         }
-        sns.set(context=context, style=style, palette=palette, rc=extra_rc)
+        sns.set_theme(context=context, style=style, palette=palette, rc=extra_rc)
     except (ImportError, SyntaxError):
         pass
 
@@ -497,6 +511,67 @@ def print_colors(palette, outfile="Palette.png"):
     ax.set_axis_off()
 
     savefig(outfile)
+
+
+def plot_heatmap(
+    ax,
+    M: np.ndarray,
+    breaks: List[int],
+    groups: List[Tuple[int, int, List[Tuple[int, str]], str]] = [],
+    plot_breaks: bool = False,
+    cmap: Optional[Union[str, Colormap]] = None,
+    binsize: Optional[int] = None,
+):
+    """Plot heatmap illustrating the contact probabilities in Hi-C data.
+
+    Args:
+        ax (pyplot.axes): Matplotlib axis
+        M (np.array): 2D numpy-array
+        breaks (List[int]): Positions of chromosome starts. Can be None.
+        iopts (OptionParser options): Graphical options passed in from commandline
+        groups (List, optional): [(start, end, [(position, seqid)], color)]. Defaults to [].
+        plot_breaks (bool): Whether to plot white breaks. Defaults to False.
+        cmap (str | Colormap, optional): Colormap. Defaults to None, which uses cubehelix.
+        binsize (int, optional): Resolution of the heatmap.
+    """
+    cmap = cmap or sns.cubehelix_palette(rot=0.5, as_cmap=True)
+    ax.imshow(M, cmap=cmap, interpolation="none")
+    _, xmax = ax.get_xlim()
+    xlim = (0, xmax)
+    if plot_breaks:
+        for b in breaks[:-1]:
+            ax.plot([b, b], xlim, "w-")
+            ax.plot(xlim, [b, b], "w-")
+
+    def simplify_seqid(seqid):
+        seqid = seqid.replace("_", "")
+        if seqid[:3].lower() == "chr":
+            seqid = seqid[3:]
+        return seqid.lstrip("0")
+
+    for start, end, position_seqids, color in groups:
+        # Plot a square
+        ax.plot([start, start], [start, end], "-", color=color)
+        ax.plot([start, end], [start, start], "-", color=color)
+        ax.plot([start, end], [end, end], "-", color=color)
+        ax.plot([end, end], [start, end], "-", color=color)
+        for position, seqid in position_seqids:
+            seqid = simplify_seqid(seqid)
+            ax.text(position, end, seqid, ha="center", va="top")
+
+    ax.set_xlim(xlim)
+    ax.set_ylim((xlim[1], xlim[0]))  # Flip the y-axis so the origin is at the top
+    ax.set_xticklabels(ax.get_xticks(), family="Helvetica", color="gray")
+    ax.set_yticklabels(ax.get_yticks(), family="Helvetica", color="gray", rotation=90)
+    ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+    if binsize is not None:
+        formatter = ticker.FuncFormatter(
+            lambda x, pos: human_readable(int(x) * binsize, pos, base=True)
+        )
+        ax.xaxis.set_major_formatter(formatter)
+        ax.yaxis.set_major_formatter(formatter)
+        title = f"Resolution = {human_size(binsize, precision=0)} per bin"
+        ax.set_xlabel(title)
 
 
 def discrete_rainbow(N=7, cmap=cm.Set1, usepreset=True, shuffle=False, plot=False):

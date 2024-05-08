@@ -1,10 +1,10 @@
 """
 Codes to submit multiple jobs to JCVI grid engine
 """
+
 import os.path as op
 import sys
 import re
-import logging
 import platform
 
 from multiprocessing import (
@@ -17,15 +17,17 @@ from multiprocessing import (
 )
 from multiprocessing.queues import Queue
 
-from jcvi.formats.base import write_file, must_open
-from jcvi.apps.base import (
-    OptionParser,
+from ..formats.base import write_file, must_open
+
+from .base import (
     ActionDispatcher,
-    popen,
+    OptionParser,
     backup,
-    mkdir,
-    sh,
     listify,
+    logger,
+    mkdir,
+    popen,
+    sh,
 )
 
 
@@ -165,7 +167,7 @@ class MakeManager(list):
             print(d, file=fw)
         print("clean :\n\trm -rf {0}\n".format(" ".join(self.targets)), file=fw)
         fw.close()
-        logging.debug("Makefile written to `{0}`.".format(self.makefile))
+        logger.debug("Makefile written to `{0}`.".format(self.makefile))
 
     def run(self, cpus=1):
         if not op.exists(self.makefile):
@@ -253,7 +255,7 @@ def write(queue_in, queue_out, filename, cpus):
 
     fw = must_open(filename, "w")
     isize = queue_in.qsize()
-    logging.debug("A total of {0} items to compute.".format(isize))
+    logger.debug("A total of {0} items to compute.".format(isize))
     isize = isize or 1
     poisons = 0
     with Progress() as progress:
@@ -401,7 +403,7 @@ class GridProcess(object):
             backup(self.errfile)
             msg += " 2> {0} ".format(self.errfile)
 
-        logging.debug(msg)
+        logger.debug(msg)
 
 
 class Grid(list):
@@ -617,7 +619,7 @@ def kill(args):
 
     valid_methods = ("pattern", "jobid")
     p = OptionParser(kill.__doc__)
-    p.add_option(
+    p.add_argument(
         "--method",
         choices=valid_methods,
         help="Identify jobs based on [default: guess]",
@@ -646,7 +648,7 @@ def kill(args):
             qsxml = check_output(shlex.split(qsxmlcmd)).strip()
         except CalledProcessError as e:
             qsxml = None
-            logging.debug(f'No jobs matching the pattern "{tag}": {e}')
+            logger.debug(f'No jobs matching the pattern "{tag}": {e}')
 
         if qsxml is not None:
             for job in ET.fromstring(qsxml).findall("djob_info"):
