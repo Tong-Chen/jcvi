@@ -22,7 +22,7 @@ e, 0, 1, athaliana.grape.4x1.simple
 
 import sys
 
-from typing import Optional
+from typing import List, Optional
 
 from ..apps.base import OptionParser, logger
 from ..compara.synteny import SimpleFile
@@ -71,7 +71,7 @@ class Layout(AbstractLayout):
     def __init__(
         self, filename, delimiter=",", generank=False, seed: Optional[int] = None
     ):
-        super(Layout, self).__init__(filename)
+        super().__init__(filename)
         fp = open(filename)
         self.edges = []
         for row in fp:
@@ -121,6 +121,7 @@ def make_circle_name(sid, rev):
 
     in_reverse = sid in rev
     sid = sid.rsplit("_", 1)[-1]
+    sid = sid.replace("chr", "").replace("Chr", "")
     si = re.findall(r"\d+", sid)
     if si:
         si = str(int(si[0]))
@@ -359,9 +360,10 @@ class Karyotype(object):
         fp = open(seqidsfile)
         # Strip the reverse orientation tag for e.g. chr3-
         di = lambda x: x[:-1] if x[-1] == "-" else x
-        for i, row in enumerate(fp):
-            if row[0] == "#":
-                continue
+        # Comments can cause layout and seqids to be out of sync
+        # https://github.com/tanghaibao/jcvi/issues/676
+        for i, row in enumerate(_ for _ in fp if not _.startswith("#") and _.strip()):
+            logger.info("Processing `%s` (track %d)", row.strip(), i)
             t = layout[i]
             # There can be comments in seqids file:
             # https://github.com/tanghaibao/jcvi/issues/335
@@ -408,7 +410,7 @@ class Karyotype(object):
         self.layout = layout
 
 
-def main():
+def main(args: List[str]):
     p = OptionParser(__doc__)
     p.add_argument(
         "--basepair",
@@ -441,7 +443,7 @@ def main():
         help="Style of chromosome labels",
     )
     p.set_outfile("karyotype.pdf")
-    opts, args, iopts = p.set_image_options(figsize="8x7")
+    opts, args, iopts = p.set_image_options(args, figsize="8x7")
 
     if len(args) != 2:
         sys.exit(not p.print_help())
@@ -467,6 +469,8 @@ def main():
     image_name = update_figname(opts.outfile, iopts.format)
     savefig(image_name, dpi=iopts.dpi, iopts=iopts)
 
+    return image_name
+
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

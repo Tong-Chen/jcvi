@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 
-import copy
-import os.path as op
 from os import remove
-
+import copy
+import logging
+import os.path as op
+import re
 import sys
+
+from os import remove
 
 from functools import partial
 from typing import Optional, List, Tuple, Union
@@ -128,7 +131,7 @@ class AbstractLayout(LineFile):
     """
 
     def __init__(self, filename):
-        super(AbstractLayout, self).__init__(filename)
+        super().__init__(filename)
 
     def assign_array(self, attrib, array):
         assert len(array) == len(self)
@@ -321,14 +324,33 @@ def update_figname(figname: str, format: str) -> str:
     return figname + "." + format
 
 
-def savefig(figname, dpi=150, iopts=None, cleanup=True):
+def update_figname(figname: str, format: str) -> str:
+    """Update the name of a figure to include the format.
+
+    Args:
+        figname (str): Path to the figure
+        format (str): Figure format, must be one of GRAPHIC_FORMATS
+
+    Returns:
+        str: New file path
+    """
+    _, ext = op.splitext(figname)
+    if ext.strip(".") in GRAPHIC_FORMATS:  # User suffix has precedence
+        return figname
+    # When the user has not supplied a format in the filename, use the requested format
+    assert format in GRAPHIC_FORMATS, "Invalid format"
+    return figname + "." + format
+
+
+def savefig(figname, dpi=150, iopts=None, cleanup=True, transparent=False):
     try:
         format = figname.rsplit(".", 1)[-1].lower()
     except:
         format = "pdf"
     try:
-        logger.debug("Matplotlib backend is: %s", mpl.get_backend())
-        plt.savefig(figname, dpi=dpi, format=format)
+        logging.debug(f"Matplotlib backend is: {mpl.get_backend()}")
+        logging.debug(f"Attempting save as: {figname}")
+        plt.savefig(figname, dpi=dpi, format=format, transparent=transparent)
     except Exception as e:
         logger.error("savefig failed with message:\n%s", e)
         logger.info("Try running again with --notex option to disable latex.")
@@ -408,11 +430,14 @@ def fontprop(ax, name, size=12):
     return prop
 
 
-def markup(s):
+def markup(s: str):
+    """
+    Change the string to latex format, and italicize the text between *.
+    """
+    if not rcParams["text.usetex"]:
+        return s
     if "$" in s:
         return s
-    import re
-
     s = latex(s)
     s = re.sub(r"\*(.*)\*", r"\\textit{\1}", s)
     return s
@@ -704,7 +729,7 @@ def draw_cmap(ax, cmap_text, vmin, vmax, cmap=None, reverse=False):
         ax.text(x, ymin - 0.005, "%.1f" % v, ha="center", va="top", size=10)
 
 
-def write_messages(ax, messages, ypad=0.04):
+def write_messages(ax, messages: List[str], ypad: float = 0.04):
     """
     Write text on canvas, usually on the top right corner.
     """
@@ -712,7 +737,7 @@ def write_messages(ax, messages, ypad=0.04):
     axt = ax.transAxes
     yy = 0.95
     for msg in messages:
-        ax.text(0.95, yy, msg, color=tc, transform=axt, ha="right")
+        ax.text(0.95, yy, markup(msg), color=tc, transform=axt, ha="right")
         yy -= ypad
 
 

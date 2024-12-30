@@ -143,7 +143,7 @@ class BedLine(object):
 
 class Bed(LineFile):
     def __init__(self, filename=None, key=None, sorted=True, juncs=False, include=None):
-        super(Bed, self).__init__(filename)
+        super().__init__(filename)
 
         # the sorting key provides some flexibility in ordering the features
         # for example, user might not like the lexico-order of seqid
@@ -155,9 +155,10 @@ class Bed(LineFile):
 
         for line in must_open(filename):
             if (
-                line[0] == "#"
-                or (juncs and line.startswith("track name"))
-                or line.strip() == ""
+                line.strip() == ""
+                or line[0] == "#"
+                or line.startswith("browser ")
+                or line.startswith("track name")
             ):
                 continue
             b = BedLine(line)
@@ -593,6 +594,7 @@ def format(args):
     Re-format BED file, e.g. switch sequence ids.
     """
     p = OptionParser(format.__doc__)
+    p.add_argument("--chrprefix", help="Add prefix to seqid")
     p.add_argument("--prefix", help="Add prefix to name column (4th)")
     p.add_argument("--switch", help="Switch seqids based on two-column file")
     p.set_outfile()
@@ -604,11 +606,14 @@ def format(args):
     (bedfile,) = args
     switch = DictFile(opts.switch, delimiter="\t") if opts.switch else None
     prefix = opts.prefix
+    chrprefix = opts.chrprefix
     bed = Bed(bedfile)
     with must_open(opts.outfile, "w") as fw:
         for b in bed:
             if prefix:
                 b.accn = prefix + b.accn
+            if chrprefix:
+                b.seqid = chrprefix + b.seqid
             if switch and b.seqid in switch:
                 b.seqid = switch[b.seqid]
             print(b, file=fw)

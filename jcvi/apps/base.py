@@ -7,11 +7,13 @@ import fnmatch
 import logging
 import os
 import os.path as op
+import platform
 import shutil
 import signal
 import sys
 import time
 
+from argparse import ArgumentParser, SUPPRESS
 from collections.abc import Iterable
 from configparser import (
     ConfigParser,
@@ -20,14 +22,13 @@ from configparser import (
     NoSectionError,
     ParsingError,
 )
-
-from argparse import ArgumentParser, SUPPRESS
 from http.client import HTTPSConnection
 from socket import gethostname
 from subprocess import CalledProcessError, PIPE, call, check_output
 from time import ctime
 from typing import Any, Collection, List, Optional, Tuple, Union
 from urllib.parse import urlencode
+
 from natsort import natsorted
 from rich.console import Console
 from rich.logging import RichHandler
@@ -138,7 +139,7 @@ class OptionParser(ArgumentParser):
 
     def __init__(self, doc: Optional[str]):
         usage = doc.replace("%prog", "%(prog)s") if doc else None
-        super(OptionParser, self).__init__(usage=usage, epilog=JCVIHELP)
+        super().__init__(usage=usage, epilog=JCVIHELP)
 
     def parse_args(self, args=None):
         """
@@ -277,7 +278,7 @@ class OptionParser(ArgumentParser):
         """
         self.add_argument("-o", "--outfile", default=outfile, help="Outfile name")
 
-    def set_outdir(self, outdir="."):
+    def set_outdir(self, outdir: Optional[str] = "."):
         self.add_argument("--outdir", default=outdir, help="Specify output directory")
 
     def set_email(self):
@@ -735,7 +736,7 @@ class OptionParser(ArgumentParser):
         part, e.g. /1, /2, or .f, .r, default behavior is to truncate until last
         char.
         """
-        self.set_usage(self.set_pairs.__doc__)
+        self.usage = self.set_pairs.__doc__
 
         self.add_argument(
             "--pairsfile", default=None, help="Write valid pairs to pairsfile"
@@ -1206,13 +1207,32 @@ def Popen(cmd, stdin=None, stdout=PIPE, debug=False, shell="/bin/bash"):
     return proc
 
 
-def is_macOS():
+def get_system_processor() -> Tuple[str, str]:
     """
-    Check if current OS is macOS, this impacts mostly plotting code.
+    Get the system and processor information.
     """
-    import platform
+    return platform.system(), platform.processor()
 
-    return platform.system() == "Darwin"
+
+def is_macOS_arm() -> bool:
+    """
+    Check if the system is macOS on ARM.
+    """
+    system, processor = get_system_processor()
+    return system == "Darwin" and "arm" in processor
+
+
+def setup_magick_home():
+    """
+    Set MAGICK_HOME for ImageMagick.
+    """
+    if "MAGICK_HOME" not in os.environ:
+        if is_macOS_arm():
+            magick_home = "/opt/homebrew/opt/imagemagick"
+            if op.isdir(magick_home):
+                os.environ["MAGICK_HOME"] = magick_home
+        else:
+            logger.error("MAGICK_HOME not set")
 
 
 def popen(cmd, debug=True, shell="/bin/bash"):
@@ -2225,7 +2245,7 @@ def inspect(object):
         print("{}: {}".format(k, details), file=sys.stderr)
 
 
-def sample_N(a: Collection[Any], N: int, seed: Optional[int] = None) -> List[Any]:
+def sample_N(a: Collection, N: int, seed: Optional[int] = None) -> List:
     """
     When size of N is > size of a, random.sample() will emit an error:
     ValueError: sample larger than population

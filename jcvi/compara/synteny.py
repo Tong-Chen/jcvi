@@ -28,7 +28,7 @@ class BlockFile(BaseFile):
     """Parse .blocks file which is the mcscan output with multiple columns as 'tracks'"""
 
     def __init__(self, filename, defaultcolor="#fb8072", header=False):
-        super(BlockFile, self).__init__(filename)
+        super().__init__(filename)
         fp = must_open(filename)
         hd = next(fp).rstrip().split("\t")
         ncols = len(hd)
@@ -41,6 +41,8 @@ class BlockFile(BaseFile):
         data = []
         highlight = []
         for row in fp:
+            if row[0] == '#':
+                continue
             hl = "*" in row
             # r* highlights the block in red color
             if hl:
@@ -1869,9 +1871,11 @@ def liftover(args):
             ac.blocks[block_id].append((query, subject, str(score) + "L"))
             lifted += 1
 
-    logger.debug("{} new pairs found (dist={}).".format(lifted, dist))
+    logger.debug("%d new pairs found (dist=%d).", lifted, dist)
     newanchorfile = anchor_file.rsplit(".", 1)[0] + ".lifted.anchors"
-    ac.print_to_file(filename=newanchorfile, accepted=accepted)
+    if accepted:
+        ac.filter_blocks(accepted)
+    ac.print_to_file(filename=newanchorfile)
     summary([newanchorfile])
 
     return newanchorfile

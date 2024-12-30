@@ -325,7 +325,7 @@ class Gff(LineFile):
         make_gff_store=False,
         compute_signature=False,
     ):
-        super(Gff, self).__init__(filename)
+        super().__init__(filename)
         self.make_gff_store = make_gff_store
         self.gff3 = True
         if self.make_gff_store:
@@ -2829,9 +2829,9 @@ def note(args):
     if type:
         type = type.split(",")
 
-    g = make_index(gffile)
     exoncounts = {}
     if opts.exoncount:
+        g = make_index(gffile)
         for feat in g.features_of_type("mRNA"):
             nexons = 0
             for c in g.children(feat.id, 1):
@@ -2850,9 +2850,7 @@ def note(args):
             continue
         if AED is not None and float(g.attributes["_AED"][0]) > AED:
             continue
-        keyval = [g.accn] + [
-            ",".join(g.attributes[x]) for x in attrib if x in g.attributes
-        ]
+        keyval = [g.accn] + [",".join(g.attributes.get(x, ["nan"])) for x in attrib]
         if exoncounts:
             nexons = exoncounts.get(g.accn, 0)
             keyval.append(str(nexons))
