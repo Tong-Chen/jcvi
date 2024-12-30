@@ -32,6 +32,8 @@ class AnchorFile(BaseFile):
         block_pairs = defaultdict(dict)
         blocks = self.blocks
         for i, ib in enumerate(blocks):
+            if not ib:
+                continue
             q, s, t = zip(*ib)
             if q[0] not in order:
                 q, s = s, q
